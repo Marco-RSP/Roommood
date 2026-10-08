@@ -45,102 +45,6 @@ window.handleEditMemberImageChange = async function (event) {
     if (fileInput) {
         try { /* nothing to do, file already set */ } catch (e) { }
     }
-
-    // --- EINKAUFSLISTE: Render, Add, Toggle, Delete, Drag&Drop Reorder ---
-    function renderShopping() {
-        const list = document.getElementById('shopping-list');
-        if (!list) return;
-        if (!appData.shopping || appData.shopping.length === 0) {
-            list.innerHTML = '<p style="color:gray; font-size:0.85rem;">Keine Einträge.</p>';
-            return;
-        }
-
-        list.innerHTML = appData.shopping.map(item => `
-    <li class="shopping-item" draggable="true" data-id="${item.id}" style="display:flex; align-items:center; justify-content:space-between; padding:8px; border-radius:6px; background:rgba(0,0,0,0.02); margin-bottom:6px;">
-      <div style="display:flex; gap:10px; align-items:center; flex:1;">
-        <input type="checkbox" ${item.done ? 'checked' : ''} onchange="toggleShoppingDone(${item.id})">
-        <div style="flex:1;">${escapeHtml(item.title)}</div>
-      </div>
-      <div style="display:flex; gap:8px; align-items:center; margin-left:8px;">
-        <button class="btn-link" onclick="deleteShoppingItem(${item.id})" style="color:#e74c3c;">Löschen</button>
-        <span class="drag-handle" style="cursor:grab;">☰</span>
-      </div>
-    </li>
-  `).join('');
-
-        // Attach drag handlers
-        try {
-            const items = Array.from(list.querySelectorAll('.shopping-item'));
-            items.forEach(li => {
-                li.addEventListener('dragstart', (e) => {
-                    try {
-                        e.dataTransfer.setData('text/plain', li.getAttribute('data-id'));
-                        e.dataTransfer.effectAllowed = 'move';
-                        li.classList.add('dragging');
-                    } catch (err) { }
-                });
-                li.addEventListener('dragend', () => { li.classList.remove('dragging'); });
-                li.addEventListener('dragover', (e) => { e.preventDefault(); li.classList.add('drag-over'); });
-                li.addEventListener('dragleave', () => { li.classList.remove('drag-over'); });
-                li.addEventListener('drop', (e) => {
-                    e.preventDefault();
-                    li.classList.remove('drag-over');
-                    try {
-                        const srcId = e.dataTransfer.getData('text/plain');
-                        const targetId = li.getAttribute('data-id');
-                        if (srcId && targetId && srcId !== targetId) reorderShopping(Number(srcId), Number(targetId));
-                    } catch (err) { }
-                });
-            });
-
-            // ensure list allows drops (for gaps)
-            list.addEventListener('dragover', (e) => { e.preventDefault(); }, { passive: false });
-        } catch (e) { console.warn('attach shopping drag handlers failed', e); }
-    }
-
-    function addShoppingItem() {
-        const input = document.getElementById('shopping-input');
-        if (!input) return;
-        const title = (input.value || '').trim();
-        if (!title) return;
-        if (!appData.shopping) appData.shopping = [];
-        const item = { id: Date.now(), title: title, done: false };
-        appData.shopping.push(item);
-        input.value = '';
-        saveToFirebase();
-        renderShopping();
-    }
-    window.addShoppingItem = addShoppingItem;
-
-    function toggleShoppingDone(id) {
-        if (!appData.shopping) return;
-        const it = appData.shopping.find(s => s.id === id);
-        if (it) { it.done = !it.done; saveToFirebase(); renderShopping(); }
-    }
-    window.toggleShoppingDone = toggleShoppingDone;
-
-    function deleteShoppingItem(id) {
-        appData.shopping = (appData.shopping || []).filter(s => s.id !== id);
-        saveToFirebase();
-        renderShopping();
-    }
-    window.deleteShoppingItem = deleteShoppingItem;
-
-    function reorderShopping(srcId, targetId) {
-        if (!appData.shopping) return;
-        const arr = appData.shopping;
-        const srcIndex = arr.findIndex(i => i.id === srcId);
-        const targetIndex = arr.findIndex(i => i.id === targetId);
-        if (srcIndex === -1 || targetIndex === -1) return;
-        const [item] = arr.splice(srcIndex, 1);
-        // if moving downwards, insert after target's new index
-        const insertIndex = srcIndex < targetIndex ? targetIndex : targetIndex;
-        arr.splice(insertIndex, 0, item);
-        appData.shopping = arr;
-        saveToFirebase();
-        renderShopping();
-    }
-    window.reorderShopping = reorderShopping;
 };
 
 // Save member edits from modal
@@ -1053,7 +957,7 @@ function renderChores() {
           <input type="checkbox" ${c.done ? 'checked' : ''} onchange="toggleChore(${c.id})">
           ${avatarHtml}
           <div>
-            <div style="font-weight:600;">${escapeHtml(c.title)}</div>
+            <div class="item-title" style="font-weight:600;">${escapeHtml(c.title)}</div>
             <div style="font-size:0.75rem; color:gray;">${escapeHtml(assignees)} • ${escapeHtml(c.frequency || '')} ${c.dueDate ? '• Fällig: ' + escapeHtml(c.dueDate) : ''}</div>
           </div>
         </div>
@@ -1178,7 +1082,7 @@ document.addEventListener('click', (e) => {
 
 window.toggleChore = function (id) {
     const item = appData.chores.find(c => c.id === id);
-    if (item) { item.done = !item.done; saveToFirebase(); }
+    if (item) { item.done = !item.done; saveToFirebase(); renderChores(); }
 };
 
 window.deleteChore = function (id) {
@@ -1306,12 +1210,13 @@ window.addTask = function () {
 
 window.toggleTask = function (id) {
     const item = appData.tasks.find(t => t.id === id);
-    if (item) { item.done = !item.done; saveToFirebase(); }
+    if (item) { item.done = !item.done; saveToFirebase(); renderTasks(); }
 };
 
 window.deleteTask = function (id) {
     appData.tasks = appData.tasks.filter(t => t.id !== id);
     saveToFirebase();
+    renderTasks();
 };
 
 // --- EINKAUFSLISTE ---
@@ -1329,19 +1234,25 @@ function renderShopping() {
     <li class="${s.done ? 'done' : ''}">
       <div style="display:flex; align-items:center; justify-content:space-between; width:100%;">
         <div>
-          <input type="checkbox" ${s.done ? 'checked' : ''} onchange="(toggleShoppingDone||(()=>{}))(${s.id})">
+          <input type="checkbox" ${s.done ? 'checked' : ''} onchange="toggleShoppingDone(${s.id})">
           <span style="margin-left: 8px;">${escapeHtml(s.title)}</span>
         </div>
-        <button class="btn-link" style="color:#e74c3c; background:none; border:none; cursor:pointer;" onclick="(deleteShoppingItem||(()=>{}))(${s.id})">🗑️</button>
+        <button class="btn-link" style="color:#e74c3c; background:none; border:none; cursor:pointer;" onclick="deleteShoppingItem(${s.id})">🗑️</button>
       </div>
     </li>
   `).join("");
 }
 
-// Ensure global bindings exist for legacy names
-if (!window.addShoppingItem && typeof addShoppingItem === 'function') window.addShoppingItem = addShoppingItem;
-if (!window.toggleShopping && typeof toggleShoppingDone === 'function') window.toggleShopping = toggleShoppingDone;
-if (!window.deleteShopping && typeof deleteShoppingItem === 'function') window.deleteShopping = deleteShoppingItem;
+window.toggleShoppingDone = function (id) {
+    const it = (appData.shopping || []).find(s => s.id === id);
+    if (it) { it.done = !it.done; saveToFirebase(); renderShopping(); }
+};
+
+window.deleteShoppingItem = function (id) {
+    appData.shopping = (appData.shopping || []).filter(s => s.id !== id);
+    saveToFirebase();
+    renderShopping();
+};
 
 // Drag & drop for the shopping list: only the ☰ handle starts a drag (pointer events,
 // works for mouse + touch), so the rest of the item scrolls and taps normally.
@@ -1357,11 +1268,11 @@ function renderShoppingImpl() {
     <li class="shopping-item ${item.done ? 'done' : ''}" data-id="${item.id}">
       <div style="display:flex; align-items:center; justify-content:space-between; gap:8px;">
         <div style="display:flex; gap:10px; align-items:center; flex:1; overflow:hidden;">
-          <input type="checkbox" ${item.done ? 'checked' : ''} onchange="(toggleShoppingDone||(()=>{}))(${item.id})">
-          <span style="min-width:0;">${escapeHtml(item.title)}</span>
+          <input type="checkbox" ${item.done ? 'checked' : ''} onchange="toggleShoppingDone(${item.id})">
+          <span class="shopping-title" style="min-width:0;">${escapeHtml(item.title)}</span>
         </div>
         <div style="display:flex; gap:8px; align-items:center;">
-          <button class="btn-link" onclick="(deleteShoppingItem||(()=>{}))(${item.id})" style="color:#e74c3c;">Löschen</button>
+          <button class="btn-link" onclick="deleteShoppingItem(${item.id})" style="color:#e74c3c;">Löschen</button>
           <span class="drag-handle" aria-label="Verschieben" style="padding:6px 8px; cursor:grab;">☰</span>
         </div>
       </div>

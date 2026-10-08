@@ -493,8 +493,16 @@ main.content { overflow-y: auto; }
   color: var(--text-muted);
 }
 
+/* Für To-Do / Einkaufsliste: keine Aufzählungspunkte */
+.todo-list {
+  list-style: none;
+  padding-left: 0;
+  margin-left: 0;
+}
+
 /* Für To-Do / Einkaufsliste: durchgestrichene Titel wenn erledigt */
-.todo-list li.done span {
+.todo-list li.done span,
+.todo-list li.done .item-title {
   text-decoration: line-through;
   color: var(--text-muted);
 }
